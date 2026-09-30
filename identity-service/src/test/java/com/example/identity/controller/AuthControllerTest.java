@@ -138,4 +138,60 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message", containsString("Không tìm thấy người dùng")));
     }
+
+    @Test
+    @DisplayName("POST /api/auth/login thành công (200 OK) với thông tin chính xác, trả về Access Token hợp lệ, không sinh Session")
+    void testLoginSuccess() throws Exception {
+        // Đăng ký user
+        RegisterRequest registerReq = new RegisterRequest("login_user", "MyPassword@123", "USER");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerReq)))
+                .andExpect(status().isCreated());
+
+        // Đăng nhập đúng thông tin
+        com.example.identity.dto.LoginRequest loginReq = new com.example.identity.dto.LoginRequest("login_user", "MyPassword@123");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.data.username").value("login_user"))
+                .andExpect(jsonPath("$.data.role").value("ROLE_USER"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().doesNotExist("Set-Cookie")); // Xác thực Stateless, không tạo JSESSIONID
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/login thất bại (401 Unauthorized) khi sai mật khẩu, trả về lỗi chung Bad credentials")
+    void testLoginWrongPassword() throws Exception {
+        // Đăng ký user
+        RegisterRequest registerReq = new RegisterRequest("login_user_2", "ValidPassword@123", "USER");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerReq)))
+                .andExpect(status().isCreated());
+
+        // Đăng nhập sai mật khẩu
+        com.example.identity.dto.LoginRequest loginReq = new com.example.identity.dto.LoginRequest("login_user_2", "WrongPassword!999");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bad credentials"));
+    }
+
+    @Test
+    @DisplayName("POST /api/auth/login thất bại (401 Unauthorized) khi không tồn tại username, trả về lỗi chung Bad credentials")
+    void testLoginNonExistentUser() throws Exception {
+        com.example.identity.dto.LoginRequest loginReq = new com.example.identity.dto.LoginRequest("ghost_user_999", "AnyPassword@123");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bad credentials"));
+    }
 }

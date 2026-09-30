@@ -9,6 +9,8 @@ public interface UserService {
 
     UserResponse register(RegisterRequest request);
 
+    com.example.identity.dto.LoginResponse login(com.example.identity.dto.LoginRequest request);
+
     String generateTokenForUser(String username);
 
     UserResponse getUserByUsername(String username);

@@ -1,6 +1,9 @@
-# SS13 - IDENTITY SERVICE, BCRYPT PASSWORD HASHING & STATELESS JWT TOKEN
+# SS13 - IDENTITY SERVICE: BCRYPT HASHING, JWT TOKEN & STATELESS AUTHENTICATION
 
-Dự án triển khai **Identity Service** trong hệ thống kiến trúc **Microservices** sử dụng **Spring Boot 3 (Java 21, Gradle)**, **Spring Security 6**, **Spring Data JPA**, **PostgreSQL**, và thư viện **JJWT (Java JSON Web Token)**.
+Dự án triển khai toàn diện **Identity Service** trong hệ thống kiến trúc **Microservices** qua 3 bài học:
+1. **Bài 1**: Tổ chức Identity Service, cấu hình Spring Security cơ bản, kết nối PostgreSQL và băm mật khẩu an toàn bằng **BCryptPasswordEncoder**.
+2. **Bài 2**: Cấu trúc 3 phần của **JSON Web Token (JWT)**, sử dụng thư viện **JJWT** tạo Token định danh Stateless với claims `sub`, `role`.
+3. **Bài 3**: Cơ chế xác thực không lưu trạng thái (**Stateless Authentication**), quy trình so khớp mật khẩu (**Password Matching** bằng `matches()`), và API đăng nhập `POST /api/auth/login`.
 
 - **GitHub Repository**: [https://github.com/HgThuan/JBE_McrSv_SS13](https://github.com/HgThuan/JBE_McrSv_SS13)
 
@@ -36,32 +39,24 @@ Sau khi người dùng đăng ký/đăng nhập, Identity Service cấp một "t
 Header.Payload.Signature
 ```
 
-1. **Header (Đầu thẻ)**:
-   - Chứa loại token (`JWT`) và thuật toán băm chữ ký (ví dụ: `HS256` - HMAC SHA-256).
-   ```json
-   {
-     "alg": "HS256"
-   }
-   ```
-2. **Payload (Thân thẻ - Claims)**:
-   - Chứa thông tin định danh người dùng:
-     - `sub` (Subject): `username` của người dùng (từ dữ liệu Bài 1).
-     - `role` (Custom claim): Vai trò của người dùng (ví dụ: `ROLE_USER`, `ROLE_ADMIN`).
-     - `iat` (Issued At): Thời điểm cấp token (timestamp).
-     - `exp` (Expiration): Thời điểm hết hạn token (`iat + 3600000ms = 1 giờ`).
-   ```json
-   {
-     "role": "ROLE_USER",
-     "sub": "john_doe",
-     "iat": 1790740578,
-     "exp": 1790744178
-   }
-   ```
-3. **Signature (Chữ ký chống giả mạo)**:
-   - Được tạo ra bằng cách lấy:
-     $$\text{HMACSHA256}(\text{base64UrlEncode}(\text{Header}) + "." + \text{base64UrlEncode}(\text{Payload}), \text{secret})$$
-   - Nếu bất kỳ ai cố tình chỉnh sửa username hay role trong Payload, chữ ký sẽ không còn khớp với secret 256-bit của server, request sẽ lập tức bị từ chối.
-   - Nhờ đó, các microservice khác chỉ cần giải mã và xác thực chữ ký của Token bằng secret chung mà không cần truy vấn lại cơ sở dữ liệu (Stateless).
+1. **Header (Đầu thẻ)**: Chứa loại token (`JWT`) và thuật toán băm chữ ký (`HS256` - HMAC SHA-256).
+2. **Payload (Thân thẻ - Claims)**: Chứa thông tin định danh:
+   - `sub` (Subject): `username` của người dùng.
+   - `role` (Custom claim): Vai trò của người dùng (ví dụ: `ROLE_USER`, `ROLE_ADMIN`).
+   - `iat` (Issued At) và `exp` (Expiration: `iat + 3600000ms = 1 giờ`).
+3. **Signature (Chữ ký chống giả mạo)**: Ký bằng HMAC-SHA256 với secret 256-bit.
+
+### 1.4. Cơ Chế Xác Thực Stateless & So Khớp Mật Khẩu (Bài 3)
+- **Stateful (Truyền thống)**: Server tạo `HttpSession`, lưu thông tin đăng nhập trong RAM/DB Server, gửi cookie `JSESSIONID` về client. Trong hệ thống phân tán (Microservices với hàng chục replica), mô hình này đòi hỏi Session Replication phức tạp hoặc Sticky Sessions, làm nghẽn cổ chai và khó mở rộng theo chiều ngang (Horizontal Scaling).
+- **Stateless (Hiện đại)**:
+  - Cấu hình `SessionCreationPolicy.STATELESS`: Vô hiệu hóa hoàn toàn việc tạo `HttpSession` và `JSESSIONID`. Server không lưu bất kỳ trạng thái nào của phiên làm việc.
+  - Mỗi request là độc lập, mang theo Token trong Header (`Authorization: Bearer <token>`).
+- **Quy trình So Khớp Mật Khẩu (Password Matching)**:
+  - **Tuyệt đối không dùng toán tử `==` hoặc `.equals()`**: Vì chuỗi mật khẩu trong DB đã được băm kèm Salt ngẫu nhiên, nên không thể băm lại mật khẩu người dùng nhập rồi so sánh bằng `.equals()`.
+  - **Bắt buộc dùng `passwordEncoder.matches(rawPassword, encodedPassword)`**: BCrypt sẽ tự động trích xuất Salt từ chuỗi hash trong database, dùng Salt đó để băm `rawPassword` và đối soát an toàn.
+- **Nguyên tắc bảo mật chống User Enumeration**:
+  - Khi đăng nhập thất bại (kể cả không tìm thấy username hoặc sai mật khẩu), hệ thống **chỉ trả về một thông báo lỗi chung chung duy nhất: `Bad credentials` (HTTP 401)**.
+  - Không bao giờ trả về "Username không tồn tại" hay "Sai mật khẩu", nhằm ngăn chặn tin tặc quét dò danh sách tài khoản hợp lệ trong hệ thống.
 
 ---
 
@@ -72,7 +67,7 @@ SS13/
 ├── .gitignore
 ├── README.md
 ├── jwt_io_result.png                       # Ảnh chụp màn hình kết quả tại jwt.io
-├── test-identity-service.sh                # Script kiểm thử tự động cURL + psql + JWT decode
+├── test-identity-service.sh                # Script kiểm thử tự động cURL + psql + JWT + Login
 └── identity-service/                       # Dự án Spring Boot (Java 21, Gradle)
     ├── build.gradle                        # Dependencies JJWT, Spring Security, JPA, PostgreSQL
     ├── settings.gradle
@@ -86,24 +81,26 @@ SS13/
         │   ├── java/com/example/identity/
         │   │   ├── IdentityServiceApplication.java
         │   │   ├── config/
-        │   │   │   └── SecurityConfig.java           # SecurityFilterChain & BCrypt bean
+        │   │   │   └── SecurityConfig.java           # SecurityFilterChain Stateless & BCrypt bean
         │   │   ├── controller/
-        │   │   │   └── AuthController.java           # POST /register & GET /test-token
+        │   │   │   └── AuthController.java           # /register, /test-token, /login
         │   │   ├── dto/
         │   │   │   ├── ApiResponse.java              # Chuẩn hóa format phản hồi JSON
-        │   │   │   ├── RegisterRequest.java          # Input DTO (@NotBlank, @Size)
-        │   │   │   └── UserResponse.java             # Output DTO (loại bỏ password)
+        │   │   │   ├── LoginRequest.java             # DTO đăng nhập (username, password)
+        │   │   │   ├── LoginResponse.java            # DTO trả về Token (accessToken, Bearer, expiresIn)
+        │   │   │   ├── RegisterRequest.java          # DTO đăng ký (@NotBlank, @Size)
+        │   │   │   └── UserResponse.java             # DTO user (loại bỏ password)
         │   │   ├── entity/
         │   │   │   └── User.java                     # Entity User (id: UUID String, username, password, role)
         │   │   ├── exception/
-        │   │   │   ├── GlobalExceptionHandler.java   # Xử lý 400, 404, 409
+        │   │   │   ├── GlobalExceptionHandler.java   # Xử lý BadCredentialsException (401), 400, 404, 409
         │   │   │   ├── UserNotFoundException.java
         │   │   │   └── UsernameAlreadyExistsException.java
         │   │   ├── repository/
         │   │   │   └── UserRepository.java           # Spring Data JPA Repository
         │   │   ├── service/
         │   │   │   ├── UserService.java
-        │   │   │   └── impl/UserServiceImpl.java    # Logic băm BCrypt & sinh JWT token
+        │   │   │   └── impl/UserServiceImpl.java    # Logic BCrypt.matches() & sinh JWT
         │   │   └── util/
         │   │       └── JwtUtil.java                  # Tạo Token, ký HS256, trích xuất claims
         │   └── resources/
@@ -111,7 +108,7 @@ SS13/
         └── test/
             └── java/com/example/identity/
                 ├── controller/
-                │   └── AuthControllerTest.java       # MockMvc integration tests
+                │   └── AuthControllerTest.java       # MockMvc integration tests (Register, Token, Login)
                 ├── service/
                 │   └── BCryptTest.java               # Unit test kiểm tra Salt BCrypt
                 └── util/
@@ -120,186 +117,165 @@ SS13/
 
 ---
 
-## 3. Cài Đặt & Thư Viện
-
-### 3.1. Thư viện phụ thuộc (`build.gradle`)
-```groovy
-plugins {
-    id 'java'
-    id 'org.springframework.boot' version '3.4.3'
-    id 'io.spring.dependency-management' version '1.1.7'
-}
-
-dependencies {
-    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    runtimeOnly 'org.postgresql:postgresql'
-
-    // JJWT (Java JWT) - Bài 2
-    implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
-
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
-    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-}
-```
-
-### 3.2. Cấu hình Cơ sở dữ liệu & JWT (`application.yml`)
-```yaml
-server:
-  port: 8080
-
-spring:
-  application:
-    name: identity-service
-  datasource:
-    url: jdbc:postgresql://localhost:5432/identity_db
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        use_sql_comments: true
-
-# Cấu hình JWT cho Identity Service
-jwt:
-  # Chuỗi bí mật 256-bit (HS256 yêu cầu khóa tối thiểu 256 bits = 32 bytes)
-  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
-  jwt-secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
-  # Thời gian hết hạn của Token: 3600000 ms = 60 phút = 1 giờ
-  expiration: 3600000
-  jwt-expiration: 3600000
-
-logging:
-  level:
-    root: INFO
-    com.example.identity: DEBUG
-    org.springframework.security: DEBUG
-```
-
----
-
-## 4. Chi Tiết Thực Thi Lớp `JwtUtil`
+## 3. Cấu Hình SecurityFilterChain & Stateless (`SecurityConfig.java`)
 
 ```java
-@Component
-public class JwtUtil {
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
 
-    private final String secret;
-    private final long expiration;
-
-    public JwtUtil(
-            @Value("${jwt.secret:${jwt.jwt-secret}}") String secret,
-            @Value("${jwt.expiration:${jwt.jwt-expiration:3600000}}") long expiration) {
-        this.secret = secret;
-        this.expiration = expiration;
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
-    private Key getSigningKey() {
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-        return Keys.hmacShaKeyFor(keyBytes);
-    }
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                // 1. Tắt CSRF vì đây là REST API Stateless
+                .csrf(AbstractHttpConfigurer::disable)
+                // 2. Cho phép permitAll cho các endpoint auth (/register, /login, /test-token)
+                .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/api/auth/**").permitAll()
+                        .anyRequest().authenticated()
+                )
+                // 3. Vô hiệu hóa tạo Session và JSESSIONID (Stateless)
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                );
 
-    public String generateToken(User user) {
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", user.getRole()); // Custom claim role
-
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expiration);
-
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(user.getUsername()) // Claim sub
-                .setIssuedAt(now)              // Claim iat
-                .setExpiration(expiryDate)     // Claim exp
-                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
-                .compact();
+        return http.build();
     }
 }
 ```
 
 ---
 
-## 5. Kết Quả Thực Nghiệm & Ảnh Chụp jwt.io
+## 4. Logic Xác Thực Tại Tầng Service (`UserServiceImpl.java`)
 
-### 5.1. Bài 1: Đăng ký tài khoản (`POST /api/auth/register`)
+```java
+@Override
+@Transactional(readOnly = true)
+public LoginResponse login(LoginRequest request) {
+    String trimmedUsername = request.getUsername().trim();
+
+    // 1. Tìm User trong Database thông qua UserRepository
+    User user = userRepository.findByUsername(trimmedUsername)
+            .orElseThrow(() -> new BadCredentialsException("Bad credentials"));
+
+    // 2. Sử dụng BCryptPasswordEncoder.matches để so khớp mật khẩu plain text với mật khẩu đã băm
+    // Tuyệt đối không dùng == hoặc equals()
+    if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+        throw new BadCredentialsException("Bad credentials");
+    }
+
+    // 3. Nếu thành công, dùng JwtUtil để sinh chuỗi JWT Token
+    String token = jwtUtil.generateToken(user);
+
+    // 4. Trả về LoginResponse chứa token, tokenType, thời gian hết hạn và thông tin người dùng
+    return new LoginResponse(
+            token,
+            "Bearer",
+            jwtUtil.getExpiration(),
+            user.getUsername(),
+            user.getRole()
+    );
+}
+```
+
+---
+
+## 5. Kết Quả Kiểm Thử Thực Tế
+
+### 5.1. Bài 1: Đăng ký người dùng (`POST /api/auth/register`)
+- **Mật khẩu gốc**: `Password123!`
+- **Database lưu trữ**: Chuỗi hash `$2a$10$dVG6Ta/emYA/mYwmSuyR/OFx7M3rd.yNhoq8J4UdhS1dN05WVmnda` (không lưu plain text).
+- **Phản hồi**: Trả về `UserResponse` chỉ có `id`, `username`, `role` (loại bỏ hoàn toàn trường password).
+
+### 5.2. Bài 2: Tạo Token kiểm thử (`GET /api/auth/test-token?username=john_doe`)
+- **Phản hồi**: Chuỗi JWT gồm đúng 3 phần:
+  ```text
+  eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9VU0VSIiwic3ViIjoiam9obl9kb2UiLCJpYXQiOjE3OTA3NDA1NzgsImV4cCI6MTc5MDc0NDE3OH0.I6pSaUl16BDIRFPUG43rD2oGuR3RhpNhClJ6AYtUrXg
+  ```
+- **Xác thực tại [jwt.io](https://jwt.io)**:
+
+![Kết quả kiểm tra JWT Token trên jwt.io](jwt_io_result.png)
+
+### 5.3. Bài 3: Đăng nhập hệ thống (`POST /api/auth/login`)
+
+#### Trường hợp 1: Thông tin đăng nhập chính xác (HTTP 200 OK)
 **Request:**
 ```http
-POST /api/auth/register HTTP/1.1
+POST /api/auth/login HTTP/1.1
 Host: localhost:8080
 Content-Type: application/json
 
 {
-  "username": "john_doe",
-  "password": "Password123!",
-  "role": "USER"
+  "username": "demo_user",
+  "password": "Password123!"
 }
 ```
-
-**Response (HTTP 201 Created):**
+**Response (HTTP 200 OK):**
 ```json
 {
   "success": true,
-  "message": "Đăng ký tài khoản thành công!",
+  "message": "Đăng nhập thành công!",
   "data": {
-    "id": "c27f6985-1e0e-44ac-be3b-508a2463274f",
-    "username": "john_doe",
+    "accessToken": "eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9VU0VSIiwic3ViIjoiZGVtb191c2VyIiwiaWF0IjoxNzkwNzQxMTE3LCJleHAiOjE3OTA3NDQ3MTd9.zNGyDDh5ru4IuGaCDFTOZCyvNcoId4fci9D79OsbJQM",
+    "tokenType": "Bearer",
+    "expiresIn": 3600000,
+    "username": "demo_user",
     "role": "ROLE_USER"
   },
-  "timestamp": "2026-09-30T10:56:15.083648"
+  "timestamp": "2026-09-30T11:05:17.975447"
+}
+```
+> **Kiểm chứng Stateless**: Headers trả về **hoàn toàn không có header `Set-Cookie`** (không tạo `JSESSIONID`), server không lưu phiên làm việc.
+
+#### Trường hợp 2: Sai mật khẩu (HTTP 401 Unauthorized)
+**Request:**
+```http
+POST /api/auth/login HTTP/1.1
+Host: localhost:8080
+Content-Type: application/json
+
+{
+  "username": "demo_user",
+  "password": "WrongPassword999"
+}
+```
+**Response (HTTP 401 Unauthorized):**
+```json
+{
+  "success": false,
+  "message": "Bad credentials",
+  "data": null,
+  "timestamp": "2026-09-30T11:05:23.260025"
 }
 ```
 
-**Truy vấn Database PostgreSQL (`identity_db`):**
-```text
-                  id                  |     username     |                           password                           |    role    
---------------------------------------+------------------+--------------------------------------------------------------+------------
- c27f6985-1e0e-44ac-be3b-508a2463274f | john_doe         | $2a$10$4spB6lJtKc57XFiDWplmmedLPjNG9pzddlHU3.lXsa7pI1TK/8pxS | ROLE_USER
-```
-
-### 5.2. Bài 2: Tạo Token định danh (`GET /api/auth/test-token?username=john_doe`)
+#### Trường hợp 3: Tên đăng nhập không tồn tại (HTTP 401 Unauthorized)
 **Request:**
 ```http
-GET /api/auth/test-token?username=john_doe HTTP/1.1
+POST /api/auth/login HTTP/1.1
 Host: localhost:8080
+Content-Type: application/json
+
+{
+  "username": "non_existent_ghost",
+  "password": "Password123!"
+}
 ```
-
-**Response (HTTP 200 OK):**
-```text
-eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoiUk9MRV9VU0VSIiwic3ViIjoiam9obl9kb2UiLCJpYXQiOjE3OTA3NDA1NzgsImV4cCI6MTc5MDc0NDE3OH0.I6pSaUl16BDIRFPUG43rD2oGuR3RhpNhClJ6AYtUrXg
+**Response (HTTP 401 Unauthorized):**
+```json
+{
+  "success": false,
+  "message": "Bad credentials",
+  "data": null,
+  "timestamp": "2026-09-30T11:05:27.814475"
+}
 ```
-
-### 5.3. Kết quả xác thực tại trang web jwt.io
-
-Ảnh chụp màn hình thực tế kết quả kiểm thử trên **[jwt.io](https://jwt.io)**:
-
-![Kết quả kiểm tra JWT Token trên jwt.io](jwt_io_result.png)
-
-- **Header**:
-  ```json
-  {
-    "alg": "HS256"
-  }
-  ```
-- **Payload**:
-  ```json
-  {
-    "role": "ROLE_USER",
-    "sub": "john_doe",
-    "iat": 1790740578,
-    "exp": 1790744178
-  }
-  ```
-- **Thời gian sống của Token**: $1790744178 - 1790740578 = 3600 \text{ giây} = 1 \text{ giờ}$ (chuẩn theo cấu hình `jwt.expiration = 3600000ms`).
+> **Nhận xét**: Cả hai trường hợp lỗi đều trả về cùng mã `401 Unauthorized` và thông báo `"Bad credentials"`, đảm bảo an toàn tuyệt đối trước các kỹ thuật tấn công User Enumeration.
 
 ---
 
@@ -317,13 +293,13 @@ cd identity-service
 ./gradlew test
 ```
 
-### 6.3. Chạy Script kiểm thử tự động toàn diện (Bash)
+### 6.3. Chạy Script kiểm thử tự động toàn diện 12 kịch bản (Bash)
 Tại thư mục gốc `SS13`:
 ```bash
 ./test-identity-service.sh
 ```
 Script sẽ tự động:
-1. Kiểm tra trạng thái port `8080`.
+1. Kiểm tra trạng thái cổng `8080`.
 2. Tạo User với role `ROLE_USER`.
 3. Tạo Admin với role `ROLE_ADMIN` cùng mật khẩu để chứng minh cơ chế Salt ngẫu nhiên của BCrypt.
 4. Truy vấn trực tiếp database `identity_db` để kiểm chứng cột `password` ở dạng `$2a$10$...`.
@@ -332,3 +308,6 @@ Script sẽ tự động:
 7. Gọi `GET /api/auth/test-token?username={name}` để tạo JWT Token.
 8. Tách và giải mã 3 phần Header, Payload (`sub`, `role`, `iat`, `exp`), và Signature.
 9. Kiểm thử `404 Not Found` khi user không tồn tại trong database.
+10. Đăng nhập thành công (`200 OK`), kiểm chứng Access Token và tính Stateless (không `Set-Cookie`).
+11. Đăng nhập thất bại do sai mật khẩu (`401 Unauthorized` + `"Bad credentials"`).
+12. Đăng nhập thất bại do username không tồn tại (`401 Unauthorized` + `"Bad credentials"`).

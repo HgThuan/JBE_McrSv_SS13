@@ -1,6 +1,8 @@
 package com.example.identity.controller;
 
 import com.example.identity.dto.ApiResponse;
+import com.example.identity.dto.LoginRequest;
+import com.example.identity.dto.LoginResponse;
 import com.example.identity.dto.RegisterRequest;
 import com.example.identity.dto.UserResponse;
 import com.example.identity.service.UserService;
@@ -18,6 +20,19 @@ public class AuthController {
 
     public AuthController(UserService userService) {
         this.userService = userService;
+    }
+
+    /**
+     * API Đăng nhập người dùng (Bài 3)
+     * POST /api/auth/login
+     *
+     * @param request Thông tin đăng nhập (username, password)
+     * @return LoginResponse chứa Access Token hợp lệ (JWT)
+     */
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
+        LoginResponse response = userService.login(request);
+        return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công!", response));
     }
 
     /**

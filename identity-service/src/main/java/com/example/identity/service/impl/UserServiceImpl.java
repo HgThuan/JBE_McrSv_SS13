@@ -28,6 +28,34 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional(readOnly = true)
+    public com.example.identity.dto.LoginResponse login(com.example.identity.dto.LoginRequest request) {
+        String trimmedUsername = request.getUsername().trim();
+
+        // 1. Tìm User trong Database thông qua UserRepository
+        User user = userRepository.findByUsername(trimmedUsername)
+                .orElseThrow(() -> new org.springframework.security.authentication.BadCredentialsException("Bad credentials"));
+
+        // 2. Sử dụng BCryptPasswordEncoder.matches để so khớp mật khẩu plain text với mật khẩu đã băm
+        // Tuyệt đối không dùng == hoặc equals()
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new org.springframework.security.authentication.BadCredentialsException("Bad credentials");
+        }
+
+        // 3. Nếu thành công, dùng JwtUtil để sinh chuỗi JWT Token
+        String token = jwtUtil.generateToken(user);
+
+        // 4. Trả về LoginResponse chứa token, tokenType, thời gian hết hạn và thông tin người dùng
+        return new com.example.identity.dto.LoginResponse(
+                token,
+                "Bearer",
+                jwtUtil.getExpiration(),
+                user.getUsername(),
+                user.getRole()
+        );
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public String generateTokenForUser(String username) {
         User user = userRepository.findByUsername(username.trim())
                 .orElseThrow(() -> new com.example.identity.exception.UserNotFoundException(

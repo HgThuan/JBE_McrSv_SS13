@@ -132,6 +132,77 @@ if [ "$NOT_FOUND_STATUS" -eq 404 ]; then
     echo -e "${GREEN}✓ Bắt lỗi user không tồn tại thành công!${NC}"
 fi
 
+# ==============================================================================
+# BÀI 3: KIỂM THỬ XÁC THỰC STATELESS VÀ API ĐĂNG NHẬP (POST /api/auth/login)
+# ==============================================================================
+echo -e "\n${BLUE}------------------------------------------------------------------------------${NC}"
+echo -e "${BLUE}        BÀI 3: KIỂM THỬ API ĐĂNG NHẬP & CƠ CHẾ XÁC THỰC STATELESS             ${NC}"
+echo -e "${BLUE}------------------------------------------------------------------------------${NC}"
+
+# 10. Đăng nhập thành công với thông tin chính xác
+echo -e "\n${YELLOW}[10] Đăng nhập thành công (POST /api/auth/login) với user: ${USER1}...${NC}"
+LOGIN_RESPONSE=$(curl -s -i -X POST "${BASE_URL}/login" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"username\": \"${USER1}\",
+    \"password\": \"${PASS}\"
+  }")
+
+LOGIN_STATUS=$(echo "${LOGIN_RESPONSE}" | grep -i "HTTP/" | awk '{print $2}')
+LOGIN_BODY=$(echo "${LOGIN_RESPONSE}" | awk 'BEGIN{RS="\r\n\r\n"; ORS=""} NR==2')
+
+echo -e "HTTP Status: ${LOGIN_STATUS} (Mong muốn: 200 OK)"
+echo -e "Response Body:"
+echo "${LOGIN_BODY}" | jq . 2>/dev/null || echo "${LOGIN_BODY}"
+
+# Kiểm tra cơ chế Stateless (Không có cookie JSESSIONID hoặc Set-Cookie)
+if echo "${LOGIN_RESPONSE}" | grep -i "Set-Cookie"; then
+    echo -e "${RED}✗ Cảnh báo: Tìm thấy Set-Cookie! Hệ thống không hoàn toàn Stateless!${NC}"
+else
+    echo -e "${GREEN}✓ Hoàn hảo: Không có header Set-Cookie! Hệ thống hoạt động hoàn toàn Stateless.${NC}"
+fi
+
+# 11. Đăng nhập thất bại do SAI MẬT KHẨU (Expect HTTP 401 Unauthorized & "Bad credentials")
+echo -e "\n${YELLOW}[11] Kiểm thử đăng nhập thất bại do SAI MẬT KHẨU...${NC}"
+WRONG_PASS_RES=$(curl -s -i -X POST "${BASE_URL}/login" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"username\": \"${USER1}\",
+    \"password\": \"IncorrectPassword999!\"
+  }")
+
+WRONG_PASS_STATUS=$(echo "${WRONG_PASS_RES}" | grep -i "HTTP/" | awk '{print $2}')
+WRONG_PASS_BODY=$(echo "${WRONG_PASS_RES}" | awk 'BEGIN{RS="\r\n\r\n"; ORS=""} NR==2')
+
+echo -e "HTTP Status: ${WRONG_PASS_STATUS} (Mong muốn: 401 Unauthorized)"
+echo -e "Response Body: ${WRONG_PASS_BODY}"
+if [ "${WRONG_PASS_STATUS}" -eq 401 ] && echo "${WRONG_PASS_BODY}" | grep -q "Bad credentials"; then
+    echo -e "${GREEN}✓ Bắt lỗi sai mật khẩu thành công với thông báo chung 'Bad credentials'!${NC}"
+else
+    echo -e "${RED}✗ Lỗi kiểm thử sai mật khẩu!${NC}"
+fi
+
+# 12. Đăng nhập thất bại do KHÔNG TỒN TẠI USERNAME (Expect HTTP 401 & "Bad credentials")
+echo -e "\n${YELLOW}[12] Kiểm thử đăng nhập thất bại do KHÔNG TỒN TẠI USERNAME...${NC}"
+WRONG_USER_RES=$(curl -s -i -X POST "${BASE_URL}/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "ghost_non_existent_user",
+    "password": "AnyPassword123!"
+  }')
+
+WRONG_USER_STATUS=$(echo "${WRONG_USER_RES}" | grep -i "HTTP/" | awk '{print $2}')
+WRONG_USER_BODY=$(echo "${WRONG_USER_RES}" | awk 'BEGIN{RS="\r\n\r\n"; ORS=""} NR==2')
+
+echo -e "HTTP Status: ${WRONG_USER_STATUS} (Mong muốn: 401 Unauthorized)"
+echo -e "Response Body: ${WRONG_USER_BODY}"
+if [ "${WRONG_USER_STATUS}" -eq 401 ] && echo "${WRONG_USER_BODY}" | grep -q "Bad credentials"; then
+    echo -e "${GREEN}✓ Bắt lỗi username không tồn tại thành công với thông báo an toàn 'Bad credentials'!${NC}"
+    echo -e "  (Chống lại kỹ thuật tấn công User Enumeration)"
+else
+    echo -e "${RED}✗ Lỗi kiểm thử username không tồn tại!${NC}"
+fi
+
 echo -e "\n${BLUE}==============================================================================${NC}"
-echo -e "${GREEN}      HOÀN TẤT KIỂM THỬ TOÀN DIỆN CHO CẢ BÀI 1 & BÀI 2!                      ${NC}"
+echo -e "${GREEN}   HOÀN TẤT KIỂM THỬ TOÀN DIỆN CHO CẢ 3 BÀI (REGISTER, JWT, LOGIN STATELESS)! ${NC}"
 echo -e "${BLUE}==============================================================================${NC}"
