@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: identity-service
+  datasource:
+    url: jdbc:postgresql://localhost:5432/identity_db
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+
+# Cấu hình JWT cho Identity Service
+jwt:
+  # Chuỗi bí mật 256-bit (HS256 yêu cầu khóa tối thiểu 256 bits = 32 bytes)
+  secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  jwt-secret: "404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970"
+  # Thời gian hết hạn của Token: 3600000 ms = 60 phút = 1 giờ
+  expiration: 3600000
+  jwt-expiration: 3600000
+
+logging:
+  level:
+    root: INFO
+    com.example.identity: DEBUG
+    org.springframework.security: DEBUG
